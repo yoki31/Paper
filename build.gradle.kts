@@ -64,9 +64,6 @@ paperweight {
     serverProject.set(project(":Paper-Server"))
 
     paper {
-        spigotApiPatchDir.set(layout.projectDirectory.dir("Spigot-API-Patches"))
-        spigotServerPatchDir.set(layout.projectDirectory.dir("Spigot-Server-Patches"))
-
         mappingsPatch.set(layout.projectDirectory.file("build-data/mappings-patch.tiny"))
 
         additionalSpigotMemberMappings.set(layout.projectDirectory.file("build-data/additional-spigot-member-mappings.csrg"))
