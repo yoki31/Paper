@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Martin Panzer <postremus1996@googlemail.com>
+Date: Sat, 28 May 2016 16:54:03 +0200
+Subject: [PATCH] Add server-name parameter
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
+index 8efd3919bec5f497ce4bee041586c0a313931211..0c069673437d97aff29b3a30caa22fcf62d0d7db 100644
+--- a/src/main/java/org/bukkit/craftbukkit/Main.java
++++ b/src/main/java/org/bukkit/craftbukkit/Main.java
+@@ -137,6 +137,14 @@ public class Main {
+                         .defaultsTo(new File("paper.yml"))
+                         .describedAs("Yml file");
+                 // Paper end
++
++                // Paper start
++                acceptsAll(asList("server-name"), "Name of the server")
++                        .withRequiredArg()
++                        .ofType(String.class)
++                        .defaultsTo("Unknown Server")
++                        .describedAs("Name");
++                // Paper end
+             }
+         };
+ 

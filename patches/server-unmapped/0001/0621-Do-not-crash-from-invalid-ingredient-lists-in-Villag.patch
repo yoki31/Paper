@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shane Freeder <theboyetronic@gmail.com>
+Date: Sun, 27 Dec 2020 11:31:06 +0000
+Subject: [PATCH] Do not crash from invalid ingredient lists in
+ VillagerAcquireTradeEvent
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/npc/EntityVillagerAbstract.java b/src/main/java/net/minecraft/world/entity/npc/EntityVillagerAbstract.java
+index adcb2070a871223abae0c055f1e88134c38a9e68..76867750e267e8b4d61e59de0a0e8ec9a315d34f 100644
+--- a/src/main/java/net/minecraft/world/entity/npc/EntityVillagerAbstract.java
++++ b/src/main/java/net/minecraft/world/entity/npc/EntityVillagerAbstract.java
+@@ -272,7 +272,11 @@ public abstract class EntityVillagerAbstract extends EntityAgeable implements NP
+                     Bukkit.getPluginManager().callEvent(event);
+                 }
+                 if (!event.isCancelled()) {
+-                    merchantrecipelist.add(CraftMerchantRecipe.fromBukkit(event.getRecipe()).toMinecraft());
++                    // Paper start
++                    final CraftMerchantRecipe craftMerchantRecipe = CraftMerchantRecipe.fromBukkit(event.getRecipe());
++                    if (craftMerchantRecipe.getIngredients().isEmpty()) return;
++                    merchantrecipelist.add(craftMerchantRecipe.toMinecraft());
++                    // Paper end
+                 }
+                 // CraftBukkit end
+             }

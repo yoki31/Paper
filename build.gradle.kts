@@ -1,3 +1,6 @@
+import io.papermc.paperweight.util.cache
+import io.papermc.paperweight.util.set
+
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "7.0.0" apply false
@@ -69,4 +72,12 @@ paperweight {
         additionalSpigotMemberMappings.set(layout.projectDirectory.file("build-data/additional-spigot-member-mappings.csrg"))
         craftBukkitPatchPatchesDir.set(layout.projectDirectory.dir("build-data/craftbukkit-patch-patches"))
     }
+}
+
+val rebuildRemappedPatches by tasks.registering(io.papermc.paperweight.tasks.RebuildPaperPatches::class) {
+    inputDir.set(layout.cache.resolve("paperweight/patch-remap-input"))
+
+    baseRef.set("origin/master")
+
+    patchDir.set(layout.projectDirectory.dir("patches/server-remapped"))
 }

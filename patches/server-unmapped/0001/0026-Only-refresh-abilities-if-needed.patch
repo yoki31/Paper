@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Zach Brown <zach.brown@destroystokyo.com>
+Date: Tue, 1 Mar 2016 23:12:03 -0600
+Subject: [PATCH] Only refresh abilities if needed
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index e9f5ef73de6fd100dda7ed006dde6635f65b1ab5..62f8d96f996ece87b7ab8d5d05d1dc214d10dbfa 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -1441,12 +1441,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+ 
+     @Override
+     public void setFlying(boolean value) {
++        boolean needsUpdate = getHandle().abilities.isFlying != value; // Paper - Only refresh abilities if needed
+         if (!getAllowFlight() && value) {
+             throw new IllegalArgumentException("Cannot make player fly if getAllowFlight() is false");
+         }
+ 
+         getHandle().abilities.isFlying = value;
+-        getHandle().updateAbilities();
++        if (needsUpdate) getHandle().updateAbilities(); // Paper - Only refresh abilities if needed
+     }
+ 
+     @Override
