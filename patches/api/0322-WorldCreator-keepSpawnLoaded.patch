@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shane Freeder <theboyetronic@gmail.com>
+Date: Sat, 3 Jul 2021 21:18:41 +0100
+Subject: [PATCH] WorldCreator#keepSpawnLoaded
+
+
+diff --git a/src/main/java/org/bukkit/UnsafeValues.java b/src/main/java/org/bukkit/UnsafeValues.java
+index 379acee1b5f2d06e6a96f3444783f4a29ca24095..937f0e4ab6dd60d4681d149a40b5dfba17d6e552 100644
+--- a/src/main/java/org/bukkit/UnsafeValues.java
++++ b/src/main/java/org/bukkit/UnsafeValues.java
+@@ -183,5 +183,7 @@ public interface UnsafeValues {
+      * @return the server's protocol version
+      */
+     int getProtocolVersion();
++
++    boolean getWorldKeepSpawnLoaded(String name);
+     // Paper end
+ }
+diff --git a/src/main/java/org/bukkit/WorldCreator.java b/src/main/java/org/bukkit/WorldCreator.java
+index e6a83252f42da31ad38f8dc1beccc7aa2c3f54b8..a66d8e02e74e3fd82c50057552995f3fa0f71f0d 100644
+--- a/src/main/java/org/bukkit/WorldCreator.java
++++ b/src/main/java/org/bukkit/WorldCreator.java
+@@ -20,6 +20,7 @@ public class WorldCreator {
+     private boolean generateStructures = true;
+     private String generatorSettings = "";
+     private boolean hardcore = false;
++    private boolean keepSpawnLoaded; // Paper
+ 
+     /**
+      * Creates an empty WorldCreationOptions for the given world name
+@@ -44,6 +45,7 @@ public class WorldCreator {
+         this.name = levelName;
+         this.seed = (new Random()).nextLong();
+         this.key = worldKey;
++        this.keepSpawnLoaded = Bukkit.getUnsafe().getWorldKeepSpawnLoaded(name); // Paper
+     }
+ 
+     /**
+@@ -435,4 +437,16 @@ public class WorldCreator {
+ 
+         return result;
+     }
++
++    // Paper start
++
++    public boolean isKeepSpawnLoaded() {
++        return keepSpawnLoaded;
++    }
++
++    public void setKeepSpawnLoaded(boolean keepSpawnLoaded) {
++        this.keepSpawnLoaded = keepSpawnLoaded;
++    }
++
++    // Paper end
+ }

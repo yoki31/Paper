@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shane Freeder <theboyetronic@gmail.com>
+Date: Sat, 3 Jul 2021 21:18:28 +0100
+Subject: [PATCH] WorldCreator#keepSpawnLoaded
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 2ba3b01092cef23bcc958244992ef44103bc7e74..c151a9deabe59a1ade128aed5b42c8972a91c5a1 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -1185,6 +1185,7 @@ public final class CraftServer implements Server {
+         internal.setSpawnSettings(true, true);
+         console.levels.put(internal.dimension(), internal);
+ 
++        internal.keepSpawnInMemory = creator.isKeepSpawnLoaded(); // Paper
+         this.getServer().loadSpawn(internal.getChunkSource().chunkMap.progressListener, internal);
+         internal.entityManager.tick(); // SPIGOT-6526: Load pending entities so they are available to the API
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java b/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
+index edf7e8d65d7f67f2f34490fdb766eca7d3b17aee..35935b90b3fa4fed7e62330d50ce270b47202288 100644
+--- a/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
++++ b/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
+@@ -510,6 +510,15 @@ public final class CraftMagicNumbers implements UnsafeValues {
+     public int getProtocolVersion() {
+         return net.minecraft.SharedConstants.getCurrentVersion().getProtocolVersion();
+     }
++
++    @Override
++    public boolean getWorldKeepSpawnLoaded(String name) {
++        // TODO: This is ass, do we parse this manually?!
++        org.spigotmc.SpigotWorldConfig spigotConfig = new org.spigotmc.SpigotWorldConfig(name);
++        com.destroystokyo.paper.PaperWorldConfig paperConfig = new com.destroystokyo.paper.PaperWorldConfig(name, spigotConfig);
++        return paperConfig.keepSpawnInMemory;
++    }
++
+     // Paper end
+ 
+     /**
