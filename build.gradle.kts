@@ -4,7 +4,7 @@ import io.papermc.paperweight.util.set
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "7.0.0" apply false
-    id("io.papermc.paperweight.core") version "1.1.8"
+    id("io.papermc.paperweight.core") version "1.1.9-SNAPSHOT"
 }
 
 subprojects {
