@@ -1,0 +1,334 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jake Potrebic <jake.m.potrebic@gmail.com>
+Date: Sun, 3 Oct 2021 17:26:37 -0700
+Subject: [PATCH] Revert to vanilla persistence and add API tristate override
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 4f164f238177b5e2b18c76b7cc14596ec93409d1..be371032028fd4c42ab0f4bb87b4e0d8b28d5157 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -2235,11 +2235,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+ 
+                 this.tickCount = nbt.getInt("Spigot.ticksLived");
+ 
+-                // Reset the persistence for tamed animals
+-                if (entity instanceof TamableAnimal && !Entity.isLevelAtLeast(nbt, 2) && !nbt.getBoolean("PersistenceRequired")) {
+-                    Mob entityinsentient = (Mob) entity;
+-                    entityinsentient.setPersistenceRequired(!entityinsentient.removeWhenFarAway(0));
+-                }
++                // Paper - vanilla persistence
+             }
+             this.persist = !nbt.contains("Bukkit.persist") || nbt.getBoolean("Bukkit.persist");
+             // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
+index 8a864238e154e2131834d013652746b7e7a78c97..2ae3d5c2954cbe4c6b8d8e0373c92b17320e867b 100644
+--- a/src/main/java/net/minecraft/world/entity/Mob.java
++++ b/src/main/java/net/minecraft/world/entity/Mob.java
+@@ -126,6 +126,7 @@ public abstract class Mob extends LivingEntity {
+     private float restrictRadius;
+ 
+     public boolean aware = true; // CraftBukkit
++    public net.kyori.adventure.util.TriState persistenceOverride = net.kyori.adventure.util.TriState.NOT_SET; // Paper
+ 
+     protected Mob(EntityType<? extends Mob> type, Level world) {
+         super(type, world);
+@@ -150,15 +151,8 @@ public abstract class Mob extends LivingEntity {
+             this.registerGoals();
+         }
+ 
+-        // CraftBukkit start - default persistance to type's persistance value
+-        this.persistenceRequired = !this.removeWhenFarAway(0);
+     }
+ 
+-    public void setPersistenceRequired(boolean persistenceRequired) {
+-        this.persistenceRequired = persistenceRequired;
+-    }
+-    // CraftBukkit end
+-
+     protected void registerGoals() {}
+ 
+     public static AttributeSupplier.Builder createMobAttributes() {
+@@ -423,6 +417,7 @@ public abstract class Mob extends LivingEntity {
+     @Override
+     public void addAdditionalSaveData(CompoundTag nbt) {
+         super.addAdditionalSaveData(nbt);
++        nbt.putString("Paper.PersistenceOverride", this.persistenceOverride.name()); // Paper
+         nbt.putBoolean("CanPickUpLoot", this.canPickUpLoot());
+         nbt.putBoolean("PersistenceRequired", this.persistenceRequired);
+         ListTag nbttaglist = new ListTag();
+@@ -515,6 +510,11 @@ public abstract class Mob extends LivingEntity {
+     @Override
+     public void readAdditionalSaveData(CompoundTag nbt) {
+         super.readAdditionalSaveData(nbt);
++        // Paper start
++        if (nbt.contains("Paper.PersistenceOverride", org.bukkit.craftbukkit.util.CraftMagicNumbers.NBT.TAG_STRING)) {
++            this.persistenceOverride = net.kyori.adventure.util.TriState.valueOf(nbt.getString("Paper.PersistenceOverride"));
++        }
++        // Paper end
+ 
+         // CraftBukkit start - If looting or persistence is false only use it if it was set after we started using it
+         if (nbt.contains("CanPickUpLoot", 1)) {
+@@ -524,10 +524,7 @@ public abstract class Mob extends LivingEntity {
+             }
+         }
+ 
+-        boolean data = nbt.getBoolean("PersistenceRequired");
+-        if (isLevelAtLeast(nbt, 1) || data) {
+-            this.persistenceRequired = data;
+-        }
++        this.persistenceRequired = nbt.getBoolean("PersistenceRequired"); // Paper - vanilla persistence
+         // CraftBukkit end
+         ListTag nbttaglist;
+         int i;
+@@ -784,11 +781,29 @@ public abstract class Mob extends LivingEntity {
+         return false;
+     }
+ 
++    // Paper start
++    public boolean despawnPersistenceCheck() {
++        if (persistenceOverride != net.kyori.adventure.util.TriState.NOT_SET) {
++            return persistenceOverride == net.kyori.adventure.util.TriState.FALSE;
++        } else {
++            return !this.isPersistenceRequired() && !this.requiresCustomPersistence();
++        }
++    }
++
++    public boolean farAwayCheck(double distanceSquared) {
++        if (persistenceOverride != net.kyori.adventure.util.TriState.NOT_SET) {
++            return persistenceOverride == net.kyori.adventure.util.TriState.FALSE;
++        } else {
++            return this.removeWhenFarAway(distanceSquared);
++        }
++    }
++    // Paper end
++
+     @Override
+     public void checkDespawn() {
+         if (this.level.getDifficulty() == Difficulty.PEACEFUL && this.shouldDespawnInPeaceful()) {
+             this.discard();
+-        } else if (!this.isPersistenceRequired() && !this.requiresCustomPersistence()) {
++        } else if (this.despawnPersistenceCheck()) { // Paper - vanilla persistence with API override
+             // Paper start - optimise checkDespawn
+             Player entityhuman = this.level.findNearbyPlayer(this, level.paperConfig.hardDespawnDistance + 1, EntitySelector.affectsSpawning); // Paper
+             if (entityhuman == null) {
+@@ -801,14 +816,14 @@ public abstract class Mob extends LivingEntity {
+                 int i = this.getType().getCategory().getDespawnDistance();
+                 int j = i * i;
+ 
+-                if (d0 > (double) level.paperConfig.hardDespawnDistance) { // CraftBukkit - remove isTypeNotPersistent() check // Paper - custom despawn distances
++                if (d0 > (double) level.paperConfig.hardDespawnDistance && this.farAwayCheck(d0)) { // CraftBukkit - remove isTypeNotPersistent() check // Paper - custom despawn distances & vanilla persistence with API override
+                     this.discard();
+                 }
+ 
+                 int k = this.getType().getCategory().getNoDespawnDistance();
+                 int l = k * k;
+ 
+-                if (this.noActionTime > 600 && this.random.nextInt(800) == 0 && d0 > level.paperConfig.softDespawnDistance) { // CraftBukkit - remove isTypeNotPersistent() check // Paper - custom despawn distances
++                if (this.noActionTime > 600 && this.random.nextInt(800) == 0 && d0 > level.paperConfig.softDespawnDistance && this.farAwayCheck(d0)) { // CraftBukkit - remove isTypeNotPersistent() check // Paper - custom despawn distances & vanilla persistence with API override
+                     this.discard();
+                 } else if (d0 < level.paperConfig.softDespawnDistance) { // Paper - custom despawn distances
+                     this.noActionTime = 0;
+diff --git a/src/main/java/net/minecraft/world/entity/animal/AbstractFish.java b/src/main/java/net/minecraft/world/entity/animal/AbstractFish.java
+index 0701adf77a04a82df4fe1dceee196fee5d820961..fb438edaecf6c5e084ef33b6e6670ed792223610 100644
+--- a/src/main/java/net/minecraft/world/entity/animal/AbstractFish.java
++++ b/src/main/java/net/minecraft/world/entity/animal/AbstractFish.java
+@@ -68,7 +68,7 @@ public abstract class AbstractFish extends WaterAnimal implements Bucketable {
+ 
+     @Override
+     public boolean removeWhenFarAway(double distanceSquared) {
+-        return true; // CraftBukkit
++        return !this.fromBucket() && !this.hasCustomName(); // Paper - vanilla persistence
+     }
+ 
+     @Override
+@@ -90,7 +90,7 @@ public abstract class AbstractFish extends WaterAnimal implements Bucketable {
+     @Override
+     public void setFromBucket(boolean fromBucket) {
+         this.entityData.set(AbstractFish.FROM_BUCKET, fromBucket);
+-        this.setPersistenceRequired(fromBucket || this.isPersistenceRequired()); // CraftBukkit - SPIGOT-4106 update persistence // Paper - actually set as persistent
++        // this.setPersistenceRequired(fromBucket || this.isPersistenceRequired()); // CraftBukkit - SPIGOT-4106 update persistence // Paper - vanilla persistence
+     }
+ 
+     @Override
+diff --git a/src/main/java/net/minecraft/world/entity/animal/Animal.java b/src/main/java/net/minecraft/world/entity/animal/Animal.java
+index 43841b5c77beb73169e2ff1645afe1234d8f74c7..2c6484e4c728393341f0563ac28926d2536a8ed8 100644
+--- a/src/main/java/net/minecraft/world/entity/animal/Animal.java
++++ b/src/main/java/net/minecraft/world/entity/animal/Animal.java
+@@ -229,11 +229,7 @@ public abstract class Animal extends AgeableMob {
+         AgeableMob entityageable = this.getBreedOffspring(world, other);
+ 
+         if (entityageable != null) {
+-            // CraftBukkit start - set persistence for tame animals
+-            if (entityageable instanceof TamableAnimal && ((TamableAnimal) entityageable).isTame()) {
+-                entityageable.setPersistenceRequired(true);
+-            }
+-            // CraftBukkit end
++            // Paper - vanilla persistence
+             ServerPlayer entityplayer = this.getLoveCause();
+ 
+             if (entityplayer == null && other.getLoveCause() != null) {
+diff --git a/src/main/java/net/minecraft/world/entity/animal/Chicken.java b/src/main/java/net/minecraft/world/entity/animal/Chicken.java
+index 9fe34da92c26185af241e6d5be90e695b03cfa99..441a3f4aafb1d3251c3b30582671910afd6cebbf 100644
+--- a/src/main/java/net/minecraft/world/entity/animal/Chicken.java
++++ b/src/main/java/net/minecraft/world/entity/animal/Chicken.java
+@@ -75,11 +75,7 @@ public class Chicken extends Animal {
+ 
+     @Override
+     public void aiStep() {
+-        // CraftBukkit start
+-        if (this.isChickenJockey()) {
+-            this.setPersistenceRequired(!this.removeWhenFarAway(0));
+-        }
+-        // CraftBukkit end
++        // Paper - vanilla persistence
+         super.aiStep();
+         this.oFlap = this.flap;
+         this.oFlapSpeed = this.flapSpeed;
+diff --git a/src/main/java/net/minecraft/world/entity/animal/Ocelot.java b/src/main/java/net/minecraft/world/entity/animal/Ocelot.java
+index 49122e7baa5c0cd3691bcb48176fdefbdb79026b..24ff7906a146770ee179606449df0cf2934eb17f 100644
+--- a/src/main/java/net/minecraft/world/entity/animal/Ocelot.java
++++ b/src/main/java/net/minecraft/world/entity/animal/Ocelot.java
+@@ -133,7 +133,7 @@ public class Ocelot extends Animal {
+ 
+     @Override
+     public boolean removeWhenFarAway(double distanceSquared) {
+-        return !this.isTrusting() && !this.hasCustomName() && !this.isLeashed() /*&& this.ticksLived > 2400*/; // CraftBukkit // Paper - honor name and leash
++        return !this.isTrusting() && !this.isLeashed() && this.tickCount > 2400; // CraftBukkit // Paper - honor leash & vanilla persistence
+     }
+ 
+     public static AttributeSupplier.Builder createAttributes() {
+diff --git a/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java b/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java
+index 2b8725087fd3bfeca7162bda2783fdacd13a8390..9bfda9405883697deddcb0c2d9bfdb2607d25328 100644
+--- a/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java
++++ b/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java
+@@ -236,7 +236,7 @@ public class Axolotl extends Animal implements LerpingModel, Bucketable {
+     @Override
+     public void setFromBucket(boolean fromBucket) {
+         this.entityData.set(Axolotl.FROM_BUCKET, fromBucket);
+-        this.setPersistenceRequired(fromBucket || this.isPersistenceRequired()); // CraftBukkit - SPIGOT-4106 update persistence // Paper - actually set as persistent
++        // this.setPersistenceRequired(fromBucket || this.isPersistenceRequired()); // CraftBukkit - SPIGOT-4106 update persistence // Paper - vanilla persistence
+     }
+ 
+     @Nullable
+@@ -503,7 +503,7 @@ public class Axolotl extends Animal implements LerpingModel, Bucketable {
+ 
+     @Override
+     public boolean removeWhenFarAway(double distanceSquared) {
+-        return true; // CraftBukkit
++        return !this.fromBucket() && !this.hasCustomName(); // Paper - vanilla persistence
+     }
+ 
+     private static class AxolotlMoveControl extends SmoothSwimmingMoveControl {
+diff --git a/src/main/java/net/minecraft/world/entity/monster/ZombieVillager.java b/src/main/java/net/minecraft/world/entity/monster/ZombieVillager.java
+index 7a2e3d2ec86536c6caa5a0af0013474143566df8..484b38b1bdb66c57c98c36bf3908a2f26706447f 100644
+--- a/src/main/java/net/minecraft/world/entity/monster/ZombieVillager.java
++++ b/src/main/java/net/minecraft/world/entity/monster/ZombieVillager.java
+@@ -198,7 +198,7 @@ public class ZombieVillager extends Zombie implements VillagerDataHolder {
+         this.villagerConversionTime = delay;
+         this.getEntityData().set(ZombieVillager.DATA_CONVERTING_ID, true);
+         // CraftBukkit start
+-        this.setPersistenceRequired(true); // CraftBukkit - SPIGOT-4684 update persistence
++        // this.setPersistenceRequired(true); // CraftBukkit - SPIGOT-4684 update persistence // Paper - vanilla persistence
+         this.removeEffect(MobEffects.WEAKNESS, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.CONVERSION);
+         this.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, delay, Math.min(this.level.getDifficulty().getId() - 1, 0)), org.bukkit.event.entity.EntityPotionEffectEvent.Cause.CONVERSION);
+         // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/world/level/NaturalSpawner.java b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
+index f316585ccf6baf5e7e514ba3a68b4344e781a82d..70d066bc40cb11d471e91d168e6d0819e83ced1a 100644
+--- a/src/main/java/net/minecraft/world/level/NaturalSpawner.java
++++ b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
+@@ -82,8 +82,7 @@ public final class NaturalSpawner {
+             if (entity instanceof Mob) {
+                 Mob entityinsentient = (Mob) entity;
+ 
+-                // CraftBukkit - Split out persistent check, don't apply it to special persistent mobs
+-                if ((entityinsentient instanceof net.minecraft.world.entity.monster.piglin.Piglin || entityinsentient instanceof net.minecraft.world.entity.monster.hoglin.Hoglin || entityinsentient.removeWhenFarAway(0)) && entityinsentient.isPersistenceRequired()) { // Paper - what a jank fix, CBs like totally tried to change what removeWhenFarAway does, that method isnt even called here in vanilla, idk wtf is going on
++                if (!entityinsentient.despawnPersistenceCheck()) { // Paper - vanilla persistence with API override
+                     continue;
+                 }
+             }
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
+index fe71123dc07cb13ffad8f13e57aa9bda1cb0abf5..2ab09499d94c1a3fdc1321c24865379b954b0f14 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftLivingEntity.java
+@@ -595,13 +595,13 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
+ 
+     @Override
+     public boolean getRemoveWhenFarAway() {
+-        return this.getHandle() instanceof Mob && !((Mob) this.getHandle()).isPersistenceRequired();
++        return this.getHandle() instanceof Mob && !((Mob) this.getHandle()).getBukkitMob().getRemoveWhenFarAway(); // Paper
+     }
+ 
+     @Override
+     public void setRemoveWhenFarAway(boolean remove) {
+         if (this.getHandle() instanceof Mob) {
+-            ((Mob) this.getHandle()).setPersistenceRequired(!remove);
++            ((Mob) this.getHandle()).persistenceOverride = net.kyori.adventure.util.TriState.byBoolean(remove); // Paper
+         }
+     }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java
+index 2386edf499cb292241f6ba60c1cdb46f2fe704ff..00dbe6c9af385c482eff95f8d6fd9662c5c4f8ab 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftMob.java
+@@ -134,5 +134,34 @@ public abstract class CraftMob extends CraftLivingEntity implements Mob {
+     public int getMaxHeadPitch() {
+         return getHandle().getMaxHeadXRot();
+     }
++
++    @Override
++    public boolean isPersistenceRequired() {
++        return getHandle().isPersistenceRequired();
++    }
++
++    @Override
++    public boolean requiresCustomPeristence() {
++        return getHandle().requiresCustomPersistence();
++    }
++
++    @Override
++    public boolean getRemoveWhenFarAway() {
++        if (getHandle().persistenceOverride != net.kyori.adventure.util.TriState.NOT_SET) {
++            return getHandle().persistenceOverride == net.kyori.adventure.util.TriState.TRUE;
++        } else {
++            return !getHandle().isPersistenceRequired() && !getHandle().requiresCustomPersistence() && getHandle().removeWhenFarAway(0);
++        }
++    }
++
++    @Override
++    public net.kyori.adventure.util.TriState getPersistenceOverride() {
++        return getHandle().persistenceOverride;
++    }
++
++    @Override
++    public void setPersistenceOverride(net.kyori.adventure.util.TriState state) {
++        getHandle().persistenceOverride = state;
++    }
+     // Paper end
+ }
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java
+index 38c692228920179ee6f4991fae4e3ebf8b4241f1..970793e9bcbe45dc752ee789a54b1af4248de4be 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftVillagerZombie.java
+@@ -75,7 +75,7 @@ public class CraftVillagerZombie extends CraftZombie implements ZombieVillager {
+         if (time < 0) {
+             this.getHandle().villagerConversionTime = -1;
+             this.getHandle().getEntityData().set(net.minecraft.world.entity.monster.ZombieVillager.DATA_CONVERTING_ID, false);
+-            this.getHandle().setPersistenceRequired(false); // CraftBukkit - SPIGOT-4684 update persistence
++            // this.getHandle().setPersistenceRequired(false); // CraftBukkit - SPIGOT-4684 update persistence // Paper - vanilla persistence
+             this.getHandle().conversionStarter = null;
+             this.getHandle().removeEffect(MobEffects.DAMAGE_BOOST, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.CONVERSION);
+         } else {
+diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+index 2b2654ec04e8abca9db09d6257edf11099bb0d9b..c5077c923ff7e22ef98f0b102614d75304cfca3c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
++++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+@@ -738,7 +738,7 @@ public class CraftEventFactory {
+         org.bukkit.entity.AnimalTamer bukkitTamer = (tamer != null ? tamer.getBukkitEntity() : null);
+         CraftServer craftServer = (CraftServer) bukkitEntity.getServer();
+ 
+-        entity.setPersistenceRequired(true);
++        // entity.setPersistenceRequired(true); // Paper - vanilla persistence
+ 
+         EntityTameEvent event = new EntityTameEvent((LivingEntity) bukkitEntity, bukkitTamer);
+         craftServer.getPluginManager().callEvent(event);
