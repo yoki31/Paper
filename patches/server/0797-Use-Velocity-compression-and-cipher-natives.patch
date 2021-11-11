@@ -5,11 +5,11 @@ Subject: [PATCH] Use Velocity compression and cipher natives
 
 
 diff --git a/build.gradle.kts b/build.gradle.kts
-index c7ebad49e04c36c27341cabc4a024f170d762f3f..f46f11c32560da6f4955284d93da3dd7e22555a3 100644
+index d162142d32430cb09e6c3ac2ad1b07b1dce78c35..32407c854b531a36df4ab24db11c0006fc523401 100644
 --- a/build.gradle.kts
 +++ b/build.gradle.kts
-@@ -55,6 +55,7 @@ dependencies {
-     implementation("io.netty:netty-all:4.1.65.Final") // Paper
+@@ -56,6 +56,7 @@ dependencies {
+     implementation("org.bstats:bstats-base:2.2.1") // Paper
  
      implementation("net.fabricmc:mapping-io:0.3.0") // Paper - needed to read mappings for stacktrace deobfuscation
 +    implementation("com.velocitypowered:velocity-native:1.1.0-SNAPSHOT") // Paper
@@ -267,7 +267,7 @@ index 524c0c674f63cfcb601416a18348f37aabb4e3ff..89bf5066b83e8d79c77c90fce1f7858c
          return this.threshold;
      }
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 0dae504f49a4a3c66a01eb03896833a010cd5821..5f43459884daea61178c3fdb913204e64f833f61 100644
+index 7c66d5d51efd3ec55f5170cf828db22e26131517..1c1a87eecc6534c37592fad7383b823286c599c4 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
 @@ -657,11 +657,28 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
